@@ -1,16 +1,22 @@
 const TelegramBot = require('node-telegram-bot-api');
 
-// قراءة التوكن من متغير البيئة
-const token = process.env.TELEGRAM_BOT_TOKEN;
+const token = process.env.BOT_TOKEN;
 
-// تفعيل البوت باستخدام long polling
+if (!token) {
+    console.error("BOT_TOKEN is missing!");
+    process.exit(1);
+}
+
 const bot = new TelegramBot(token, { polling: true });
 
-bot.on('message', (msg) => {
-  const chatId = msg.chat.id;
-  const text = msg.text;
+console.log("Bot is running...");
 
-  bot.sendMessage(chatId, `تم استلام رسالتك: "${text}"`);
+bot.onText(/\/start/, (msg) => {
+    bot.sendMessage(msg.chat.id, "Bot is working successfully ✅");
 });
 
-console.log('Bot is running...');
+bot.on('message', (msg) => {
+    if (msg.text !== "/start") {
+        bot.sendMessage(msg.chat.id, `You said: ${msg.text}`);
+    }
+});
