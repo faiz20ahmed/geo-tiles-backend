@@ -1,7 +1,6 @@
 {
   "name": "geo-tiles-bot",
   "version": "1.0.0",
-  "description": "Telegram bot for geo tiles project",
   "main": "bot_test.js",
   "scripts": {
     "start": "node bot_test.js"
