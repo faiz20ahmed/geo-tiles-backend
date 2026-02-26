@@ -1,4 +1,19 @@
 const TelegramBot = require('node-telegram-bot-api');
+const express = require('express');
+
+const app = express();
+const port = process.env.PORT || 8080;
+
+// Web server بسيط لإرضاء Railway
+app.get('/', (req, res) => {
+    res.send('Bot is running');
+});
+
+app.listen(port, () => {
+    console.log(`Web server running on port ${port}`);
+});
+
+// ===== Telegram Bot =====
 
 const token = process.env.BOT_TOKEN;
 
