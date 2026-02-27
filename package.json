@@ -1,18 +1,22 @@
 {
   "name": "geo-tiles-bot",
   "version": "1.0.0",
-  "description": "Telegram bot for geo tiles and database interaction",
+  "description": "Telegram / Discord bot connected to PostgreSQL on Railway",
   "main": "bot_test.js",
+  "type": "module",
   "scripts": {
-    "start": "node bot_test.js"
+    "start": "node bot_test.js",
+    "dev": "nodemon bot_test.js"
   },
   "dependencies": {
-    "node-telegram-bot-api": "^0.61.0",
-    "pg": "^8.11.1",
-    "dotenv": "^16.3.1"
+    "pg": "^8.11.2",
+    "discord.js": "^14.11.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
   },
   "engines": {
-    "node": "22.x"
+    "node": ">=18.0.0"
   },
   "author": "faiz",
   "license": "ISC"
