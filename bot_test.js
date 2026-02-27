@@ -1,61 +1,58 @@
-// bot_test.js (نسخة محدثة للـ Railway)
-import { Client, GatewayIntentBits } from 'discord.js'; // أو من أي مكتبة Telegram حسب مشروعك
-import pg from 'pg';
+// bot_test.js
+import pkg from 'pg';
+import TelegramBot from 'node-telegram-bot-api';
+import dotenv from 'dotenv';
 
-// قراءة المتغيرات من البيئة
-const BOT_TOKEN = process.env.BOT_TOKEN;
-const DATABASE_URL = process.env.DATABASE_URL;
+dotenv.config(); // تحميل متغيرات البيئة
 
-if (!BOT_TOKEN) {
-  console.error('❌ BOT_TOKEN غير موجود في Environment Variables');
-  process.exit(1);
-}
+const { Pool } = pkg;
 
-if (!DATABASE_URL) {
-  console.error('❌ DATABASE_URL غير موجود في Environment Variables');
-  process.exit(1);
-}
-
-// إعداد قاعدة البيانات
-const pool = new pg.Pool({
-  connectionString: DATABASE_URL,
-  ssl: { rejectUnauthorized: false }, // مهم إذا Railway يستخدم SSL
+// --- إعداد قاعدة البيانات PostgreSQL ---
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
 });
 
-pool.connect()
-  .then(() => console.log('✅ تم الاتصال بقاعدة البيانات PostgreSQL بنجاح'))
-  .catch(err => {
+async function testDBConnection() {
+  try {
+    const client = await pool.connect();
+    console.log('✅ تم الاتصال بقاعدة البيانات PostgreSQL بنجاح');
+    client.release();
+  } catch (err) {
     console.error('❌ خطأ في الاتصال بقاعدة البيانات:', err);
-    process.exit(1);
-  });
-
-// إعداد البوت
-const bot = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages] });
-
-// بدء البوت
-bot.once('ready', () => {
-  console.log(`🤖 البوت يعمل الآن كـ ${bot.user.tag}`);
-});
-
-bot.on('messageCreate', async message => {
-  if (message.author.bot) return;
-
-  // مثال بسيط: عند إرسال "!ping" يرد "Pong!"
-  if (message.content === '!ping') {
-    message.reply('Pong!');
   }
+}
+
+// --- إعداد بوت Telegram ---
+const botToken = process.env.TELEGRAM_BOT_TOKEN;
+if (!botToken) {
+  console.error('❌ خطأ: لم يتم تحديد TELEGRAM_BOT_TOKEN في متغيرات البيئة.');
+  process.exit(1);
+}
+
+const bot = new TelegramBot(botToken, { polling: true });
+
+bot.on('message', async (msg) => {
+  const chatId = msg.chat.id;
+  const text = msg.text || '';
+
+  console.log(`📨 رسالة واردة من ${msg.from.username || msg.from.first_name}: ${text}`);
+
+  // مثال: حفظ كل رسالة في قاعدة البيانات
+  try {
+    await pool.query(
+      'INSERT INTO messages(chat_id, username, text, created_at) VALUES($1, $2, $3, NOW())',
+      [chatId, msg.from.username || msg.from.first_name, text]
+    );
+  } catch (err) {
+    console.error('❌ خطأ في إدخال الرسالة في قاعدة البيانات:', err);
+  }
+
+  // الرد على المستخدم
+  bot.sendMessage(chatId, `تم استلام رسالتك: "${text}"`);
 });
 
-// تسجيل الدخول
-bot.login(BOT_TOKEN)
-  .catch(err => {
-    console.error('❌ خطأ في تسجيل الدخول للبوت:', err);
-    process.exit(1);
-  });
-
-// عند إغلاق العملية
-process.on('SIGINT', async () => {
-  console.log('🛑 جاري إغلاق الاتصال بقاعدة البيانات...');
-  await pool.end();
-  process.exit(0);
-});
+// بدء تشغيل
+(async () => {
+  await testDBConnection();
+  console.log('🤖 Telegram Bot is running...');
+})();
