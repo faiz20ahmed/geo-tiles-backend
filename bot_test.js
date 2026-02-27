@@ -1,75 +1,61 @@
-// ===============================
-// Required Packages
-// ===============================
-const TelegramBot = require('node-telegram-bot-api');
-const express = require('express');
-const { Client } = require('pg');
+// bot_test.js (نسخة محدثة للـ Railway)
+import { Client, GatewayIntentBits } from 'discord.js'; // أو من أي مكتبة Telegram حسب مشروعك
+import pg from 'pg';
 
-// ===============================
-// Environment Variables
-// ===============================
-const token = process.env.BOT_TOKEN; // ضع التوكن في Railway Variables
+// قراءة المتغيرات من البيئة
+const BOT_TOKEN = process.env.BOT_TOKEN;
 const DATABASE_URL = process.env.DATABASE_URL;
-const PORT = process.env.PORT || 8080;
 
-// ===============================
-// PostgreSQL Connection
-// ===============================
-const db = new Client({
+if (!BOT_TOKEN) {
+  console.error('❌ BOT_TOKEN غير موجود في Environment Variables');
+  process.exit(1);
+}
+
+if (!DATABASE_URL) {
+  console.error('❌ DATABASE_URL غير موجود في Environment Variables');
+  process.exit(1);
+}
+
+// إعداد قاعدة البيانات
+const pool = new pg.Pool({
   connectionString: DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false, // مطلوب في Railway
-  },
+  ssl: { rejectUnauthorized: false }, // مهم إذا Railway يستخدم SSL
 });
 
-db.connect()
-  .then(() => {
-    console.log('✅ Connected to PostgreSQL');
-  })
-  .catch((err) => {
-    console.error('❌ PostgreSQL connection error:', err);
+pool.connect()
+  .then(() => console.log('✅ تم الاتصال بقاعدة البيانات PostgreSQL بنجاح'))
+  .catch(err => {
+    console.error('❌ خطأ في الاتصال بقاعدة البيانات:', err);
+    process.exit(1);
   });
 
-// ===============================
-// Express Web Server (Railway Requirement)
-// ===============================
-const app = express();
+// إعداد البوت
+const bot = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages] });
 
-app.get('/', (req, res) => {
-  res.send('Geo Tiles Bot is running 🚀');
+// بدء البوت
+bot.once('ready', () => {
+  console.log(`🤖 البوت يعمل الآن كـ ${bot.user.tag}`);
 });
 
-app.listen(PORT, () => {
-  console.log(`Web server running on port ${PORT}`);
-});
+bot.on('messageCreate', async message => {
+  if (message.author.bot) return;
 
-// ===============================
-// Telegram Bot
-// ===============================
-const bot = new TelegramBot(token, { polling: true });
-
-console.log('Bot is running...');
-
-// Command: /start
-bot.onText(/\/start/, async (msg) => {
-  const chatId = msg.chat.id;
-
-  try {
-    await db.query(
-      `INSERT INTO users (telegram_id, created_at)
-       VALUES ($1, NOW())
-       ON CONFLICT (telegram_id) DO NOTHING`,
-      [chatId]
-    );
-
-    bot.sendMessage(chatId, "✅ مرحباً بك في نظام Geo Tiles");
-  } catch (error) {
-    console.error("DB Error:", error);
-    bot.sendMessage(chatId, "⚠️ حدث خطأ في الاتصال بقاعدة البيانات");
+  // مثال بسيط: عند إرسال "!ping" يرد "Pong!"
+  if (message.content === '!ping') {
+    message.reply('Pong!');
   }
 });
 
-// Error Handling
-bot.on('polling_error', (error) => {
-  console.error('Polling error:', error);
+// تسجيل الدخول
+bot.login(BOT_TOKEN)
+  .catch(err => {
+    console.error('❌ خطأ في تسجيل الدخول للبوت:', err);
+    process.exit(1);
+  });
+
+// عند إغلاق العملية
+process.on('SIGINT', async () => {
+  console.log('🛑 جاري إغلاق الاتصال بقاعدة البيانات...');
+  await pool.end();
+  process.exit(0);
 });
