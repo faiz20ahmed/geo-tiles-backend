@@ -2,6 +2,8 @@
 import pkg from 'pg';
 import TelegramBot from 'node-telegram-bot-api';
 import dotenv from 'dotenv';
+import express from 'express';
+import jwt from 'jsonwebtoken';
 
 dotenv.config(); // تحميل متغيرات البيئة
 
@@ -51,7 +53,43 @@ bot.on('message', async (msg) => {
   bot.sendMessage(chatId, `تم استلام رسالتك: "${text}"`);
 });
 
-// بدء تشغيل
+// ================================
+// Express Server + Download Route
+// ================================
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// دالة توليد توكن تحميل مؤقت
+export function generateDownloadToken(data) {
+  return jwt.sign(data, process.env.DOWNLOAD_SECRET, {
+    expiresIn: '60s'
+  });
+}
+
+// Route للتحميل المؤقت
+app.get('/download', async (req, res) => {
+  try {
+    const { token } = req.query;
+
+    const decoded = jwt.verify(token, process.env.DOWNLOAD_SECRET);
+    const { sw_lat, sw_lon, film_code } = decoded;
+
+    // حالياً الملفات على Telegram لاحقاً على مجلد files/
+    const filePath = `files/${sw_lat}_${sw_lon}_${film_code}.tif`;
+
+    res.download(filePath);
+
+  } catch (err) {
+    return res.status(401).json({ error: 'Link expired or invalid' });
+  }
+});
+
+// بدء تشغيل Express Server
+app.listen(PORT, () => {
+  console.log(`🚀 Download server running on port ${PORT}`);
+});
+
+// بدء تشغيل البوت بعد اختبار DB
 (async () => {
   await testDBConnection();
   console.log('🤖 Telegram Bot is running...');
