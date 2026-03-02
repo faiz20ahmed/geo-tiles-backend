@@ -3,6 +3,7 @@ import TelegramBot from 'node-telegram-bot-api';
 import dotenv from 'dotenv';
 import express from 'express';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 
 dotenv.config();
 
@@ -88,7 +89,6 @@ bot.on('message', async (msg) => {
       );
     }
 
-    // مثال تسجيل رسالة (كتابة)
     await write(
       'INSERT INTO messages(chat_id, username, text, created_at) VALUES($1,$2,$3,NOW())',
       [chatId, msg.from.username || msg.from.first_name, text]
@@ -109,47 +109,106 @@ bot.on('message', async (msg) => {
 });
 
 /* =======================================
-   EXPRESS DOWNLOAD SERVER
+   TEMP LINK CREATION
+======================================= */
+
+export async function createDownloadLink(data) {
+
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + 60 * 1000); // دقيقة
+
+  await write(
+    `INSERT INTO temp_links
+     (token, user_id, sw_lat, sw_lon, film_code, expires_at)
+     VALUES ($1,$2,$3,$4,$5,$6)`,
+    [
+      token,
+      data.user_id,
+      data.sw_lat,
+      data.sw_lon,
+      data.film_code,
+      expiresAt
+    ]
+  );
+
+  return `${process.env.BASE_URL}/download?token=${token}`;
+}
+
+/* =======================================
+   EXPRESS DOWNLOAD SERVER (SECURE)
 ======================================= */
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-export function generateDownloadToken(data) {
-  return jwt.sign(data, process.env.DOWNLOAD_SECRET, {
-    expiresIn: '60s'
-  });
-}
-
 app.get('/download', async (req, res) => {
+
+  const client = await pool.connect();
 
   try {
 
     const { token } = req.query;
-    const decoded = jwt.verify(token, process.env.DOWNLOAD_SECRET);
 
-    const { sw_lat, sw_lon, film_code } = decoded;
-    const filePath = `files/${sw_lat}_${sw_lon}_${film_code}.tif`;
+    await client.query('BEGIN');
 
-    // ✅ خصم الرصيد بعد نجاح التحميل فقط
-    res.download(filePath, async (err) => {
-      if (err) {
-        console.error("❌ Download failed", err);
-      } else {
-        try {
-          await write(
-            'UPDATE users SET balance_basic = balance_basic - 1 WHERE user_id = $1',
-            [decoded.user_id]
-          );
-          console.log(`💰 Remainder deducted for user ${decoded.user_id}`);
-        } catch (e) {
-          console.error("❌ Failed to deduct balance", e);
-        }
-      }
-    });
+    const linkResult = await client.query(
+      `SELECT * FROM temp_links
+       WHERE token = $1
+       AND used = FALSE
+       AND expires_at > NOW()
+       FOR UPDATE`,
+      [token]
+    );
+
+    if (linkResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(401).json({ error: 'Invalid or expired link' });
+    }
+
+    const link = linkResult.rows[0];
+
+    const userResult = await client.query(
+      `SELECT balance_basic FROM users
+       WHERE user_id = $1
+       FOR UPDATE`,
+      [link.user_id]
+    );
+
+    if (userResult.rows.length === 0 ||
+        userResult.rows[0].balance_basic <= 0) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'Insufficient balance' });
+    }
+
+    await client.query(
+      `UPDATE users
+       SET balance_basic = balance_basic - 1
+       WHERE user_id = $1`,
+      [link.user_id]
+    );
+
+    await client.query(
+      `UPDATE temp_links
+       SET used = TRUE
+       WHERE token = $1`,
+      [token]
+    );
+
+    await client.query('COMMIT');
+
+    const filePath =
+      `files/${link.sw_lat}_${link.sw_lon}_${link.film_code}.tif`;
+
+    return res.download(filePath);
 
   } catch (err) {
-    return res.status(401).json({ error: 'Link expired or invalid' });
+
+    await client.query('ROLLBACK');
+    console.error(err);
+    return res.status(500).json({ error: 'Download failed' });
+
+  } finally {
+    client.release();
   }
 
 });
