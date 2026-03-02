@@ -131,7 +131,22 @@ app.get('/download', async (req, res) => {
     const { sw_lat, sw_lon, film_code } = decoded;
     const filePath = `files/${sw_lat}_${sw_lon}_${film_code}.tif`;
 
-    res.download(filePath);
+    // ✅ خصم الرصيد بعد نجاح التحميل فقط
+    res.download(filePath, async (err) => {
+      if (err) {
+        console.error("❌ Download failed", err);
+      } else {
+        try {
+          await write(
+            'UPDATE users SET balance_basic = balance_basic - 1 WHERE user_id = $1',
+            [decoded.user_id]
+          );
+          console.log(`💰 Remainder deducted for user ${decoded.user_id}`);
+        } catch (e) {
+          console.error("❌ Failed to deduct balance", e);
+        }
+      }
+    });
 
   } catch (err) {
     return res.status(401).json({ error: 'Link expired or invalid' });
