@@ -11,10 +11,11 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "node-telegram-bot-api": "^0.61.0",
-    "pg": "^8.11.1",
-    "dotenv": "^16.3.1",
     "bcrypt": "^5.1.0",
-    "jsonwebtoken": "^9.0.2"
+    "dotenv": "^16.3.1",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.2",
+    "node-telegram-bot-api": "^0.61.0",
+    "pg": "^8.11.1"
   }
 }

@@ -161,4 +161,5 @@ app.get('/download', async (req, res) => {
   await connectDatabase();
   console.log("🤖 Bot is running...");
 })();
+
 app.listen(PORT, () => console.log(`🚀 Download server running on port ${PORT}`));
