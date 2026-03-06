@@ -1,3 +1,4 @@
+// bot_test.js - Railway-ready with Webhook
 import pkg from 'pg';
 import TelegramBot from 'node-telegram-bot-api';
 import dotenv from 'dotenv';
@@ -12,7 +13,6 @@ const { Pool } = pkg;
 /* =======================================
    DATABASE CONNECTION
 ======================================= */
-
 let pool;
 let isOffline = false;
 
@@ -35,7 +35,6 @@ async function connectDatabase() {
 /* =======================================
    DATABASE HELPERS
 ======================================= */
-
 async function read(query, params) {
   return pool.query(query, params);
 }
@@ -46,17 +45,22 @@ async function write(query, params) {
 }
 
 /* =======================================
-   TELEGRAM BOT SETUP
+   TELEGRAM BOT SETUP (Webhook)
 ======================================= */
-
 const botToken = process.env.TELEGRAM_BOT_TOKEN;
 if (!botToken) { console.error("❌ TELEGRAM_BOT_TOKEN missing"); process.exit(1); }
-const bot = new TelegramBot(botToken, { polling: true });
+
+const bot = new TelegramBot(botToken); // No polling
+const HOST_URL = process.env.HOST_URL;
+if (!HOST_URL) console.warn("⚠️ HOST_URL not set in env, Webhook may fail");
+
+const webhookUrl = `${HOST_URL}/bot${botToken}`;
+bot.setWebHook(webhookUrl);
+console.log(`🌐 Webhook set to ${webhookUrl}`);
 
 /* =======================================
    USER MANAGEMENT
 ======================================= */
-
 async function registerUser(telegram_id, password) {
   const hashed = await bcrypt.hash(password, 10);
   return write(
@@ -79,7 +83,6 @@ function generateJWT(user) {
 /* =======================================
    BOT HANDLERS
 ======================================= */
-
 bot.onText(/\/register (.+)/, async (msg, match) => {
   const chatId = msg.chat.id;
   const password = match[1];
@@ -103,18 +106,26 @@ bot.onText(/\/login (.+)/, async (msg, match) => {
 /* =======================================
    TEMP LINK SYSTEM
 ======================================= */
-
 export function generateDownloadToken(data) {
   return jwt.sign(data, process.env.DOWNLOAD_SECRET, { expiresIn: '60s' });
 }
 
 /* =======================================
-   EXPRESS DOWNLOAD SERVER
+   EXPRESS DOWNLOAD SERVER + Webhook endpoint
 ======================================= */
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Parse incoming JSON for Webhook
+app.use(express.json());
+
+// Telegram Webhook endpoint
+app.post(`/bot${botToken}`, (req, res) => {
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
+});
+
+// Download endpoint
 app.get('/download', async (req, res) => {
   const { token } = req.query;
   let client;
@@ -156,7 +167,6 @@ app.get('/download', async (req, res) => {
 /* =======================================
    START SYSTEM
 ======================================= */
-
 (async () => {
   await connectDatabase();
   console.log("🤖 Bot is running...");
